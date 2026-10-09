@@ -1,0 +1,251 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mission Map</title>
+<style>
+:root{--bg:#f6f4ef;--fg:#1f2430;--muted:#6b7280;--sea:#dbe8f2;--land:#c9d3c0;--line:#fff;--card:#fff;--accent:#c2410c;--bd:#e3dfd6;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14171d;--fg:#eceae4;--muted:#9aa1ad;--sea:#1c2733;--land:#3a4638;--line:#14171d;--card:#1d222b;--accent:#fb923c;--bd:#2b313c}}
+:root[data-theme="dark"]{--bg:#14171d;--fg:#eceae4;--muted:#9aa1ad;--sea:#1c2733;--land:#3a4638;--line:#14171d;--card:#1d222b;--accent:#fb923c;--bd:#2b313c}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:0}
+.sub{color:var(--muted);margin:2px 0 12px}
+.stats{display:flex;gap:16px;margin-bottom:10px;font-weight:600}
+.stats span b{color:var(--accent);font-size:1.3rem}
+#map{background:var(--sea);border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+svg{display:block;width:100%;height:auto}
+.land{fill:var(--land);stroke:var(--line);stroke-width:.5;cursor:crosshair}
+.pin{cursor:pointer}
+.pin path{stroke:var(--accent);stroke-width:3.2;stroke-linecap:round;fill:none}
+.pin text{font-size:9px;font-weight:700;fill:var(--fg);paint-order:stroke;stroke:var(--sea);stroke-width:2.5px}
+.pin.sel path{stroke-width:4.5}
+#panel{margin-top:12px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
+#panel.hide{display:none}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+label{display:flex;flex-direction:column;font-size:.85rem;color:var(--muted);flex:1;min-width:150px}
+input{font:inherit;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg);margin-top:3px}
+button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--bd);background:var(--bg);color:var(--fg);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.actions{display:flex;gap:8px;margin-top:12px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.tools input{flex:1;min-width:200px;margin:0}
+#map{position:relative;touch-action:none}
+.zc{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px}
+.zc button{width:38px;height:38px;padding:0;font-size:1.3rem;line-height:1}
+.land{vector-effect:non-scaling-stroke}
+#msg{color:var(--muted);font-size:.85rem;margin:-4px 0 8px;min-height:1.2em}
+.hint{color:var(--muted);font-size:.85rem;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>✚ Mission Map</h1>
+<p class="sub">Search an address or click the map to mark where a mission took place. Scroll, pinch or use + / − to zoom; drag to move.</p>
+<div class="stats"><span><b id="tPins">0</b> places</span><span><b id="tCount">0</b> people reached</span></div>
+<div class="tools">
+  <input id="q" placeholder="Find a city or full address, or type lat, lon (e.g. -1.286, 36.817)">
+  <button class="primary" id="find">Find &amp; pin</button>
+</div>
+<div id="msg"></div>
+<div id="map"><div class="zc"><button id="zin" title="Zoom in">+</button><button id="zout" title="Zoom out">−</button><button id="zreset" title="Reset" style="font-size:.9rem">⟲</button></div></div>
+<div id="panel" class="hide">
+  <div class="row">
+    <label>Place name<input id="name" placeholder="e.g. Nairobi, Kenya" maxlength="60"></label>
+    <label>People touched<input id="count" type="number" min="0" inputmode="numeric" placeholder="0"></label>
+  </div>
+  <div class="actions">
+    <button class="primary" id="save">Save</button>
+    <button id="del" style="display:none">Delete</button>
+    <button id="cancel">Cancel</button>
+  </div>
+  <div class="hint" id="coords"></div>
+</div>
+<p class="hint">Pins are saved in this browser. Tip: after searching, zoom in and click the exact spot to fine-tune the pin.</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/1.6.9/topojson.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/datamaps/0.5.9/datamaps.world.min.js"></script>
+<script>
+var W=960,H=500;
+var proj=d3.geo.equirectangular().scale(153).translate([W/2,H/2+10]);
+var path=d3.geo.path().projection(proj);
+var svg=d3.select('#map').append('svg').attr('viewBox','0 0 '+W+' '+H);
+var world=svg.append('g');
+var K=1;
+var zoom=d3.behavior.zoom().scaleExtent([1,80]).on('zoom',function(){
+  K=d3.event.scale;
+  world.attr('transform','translate('+d3.event.translate+')scale('+K+')');
+  place();
+});
+svg.call(zoom).on('dblclick.zoom',null);
+var topo=Datamap.prototype.worldTopo;
+var key=Object.keys(topo.objects)[0];
+var feats=topojson.feature(topo,topo.objects[key]).features.filter(function(f){return f.id!=='ATA'});
+world.append('g').selectAll('path').data(feats).enter().append('path').attr('class','land').attr('d',path)
+  .on('click',function(){openNew(d3.mouse(world.node()))});
+var gPins=world.append('g');
+var temp=world.append('circle').attr('r',8).attr('fill','none').attr('stroke','#c2410c').attr('stroke-width',2).attr('stroke-dasharray','3 2').style('display','none').style('pointer-events','none');
+var tempPt=null;
+function place(){
+  gPins.selectAll('g.pin').attr('transform',function(d){var p=proj([d.lon,d.lat]);return 'translate('+p[0]+','+p[1]+')scale('+(1/K)+')'});
+  if(tempPt)temp.attr('transform','translate('+tempPt[0]+','+tempPt[1]+')scale('+(1/K)+')');
+}
+function flyTo(lon,lat,k){
+  var p=proj([lon,lat]);
+  k=Math.max(1,Math.min(80,k));
+  zoom.scale(k).translate([W/2-k*p[0],H/2-k*p[1]]);
+  zoom.event(svg);
+}
+function zoomBy(f){
+  var k=Math.max(1,Math.min(80,K*f)),t=zoom.translate(),c=[W/2,H/2];
+  var nt=[c[0]-(c[0]-t[0])*k/K,c[1]-(c[1]-t[1])*k/K];
+  svg.transition().duration(300).call(zoom.translate(nt).scale(k).event);
+}
+document.getElementById('zin').onclick=function(){zoomBy(2)};
+document.getElementById('zout').onclick=function(){zoomBy(.5)};
+document.getElementById('zreset').onclick=function(){svg.transition().duration(500).call(zoom.translate([0,0]).scale(1).event)};
+
+var pins=[],cur=null,KEY='mission-pins-v1';
+try{pins=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){pins=[]}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(pins))}catch(e){}}
+var $=function(id){return document.getElementById(id)};
+
+function render(){
+  var s=gPins.selectAll('g.pin').data(pins,function(d){return d.id});
+  var en=s.enter().append('g').attr('class','pin');
+  en.append('circle').attr('r',11).attr('fill','transparent');
+  en.append('path').attr('d','M-6,0H6M0,-6V6');
+  en.append('text').attr('x',9).attr('y',-6);
+  en.append('title');
+  en.on('click',function(d){d3.event.stopPropagation();openEdit(d)});
+  s.classed('sel',function(d){return cur&&cur.id===d.id});
+  s.select('text').text(function(d){return d.count});
+  s.select('title').text(function(d){return (d.name||'Mission')+': '+d.count+' people'});
+  s.exit().remove();
+  place();
+  $('tPins').textContent=pins.length;
+  $('tCount').textContent=pins.reduce(function(a,p){return a+(+p.count||0)},0).toLocaleString();
+}
+function show(){$('panel').classList.remove('hide')}
+function close(){$('panel').classList.add('hide');temp.style('display','none');tempPt=null;cur=null;render()}
+function openNew(p){
+  var ll=proj.invert(p);
+  cur={id:null,lon:ll[0],lat:ll[1]};
+  tempPt=p;temp.style('display',null);place();
+  $('name').value='';$('count').value='';$('del').style.display='none';
+  $('coords').textContent='New spot at '+ll[1].toFixed(2)+'°, '+ll[0].toFixed(2)+'°';
+  show();$('name').focus();render();
+}
+function openEdit(d){
+  cur=d;temp.style('display','none');tempPt=null;
+  $('name').value=d.name||'';$('count').value=d.count;$('del').style.display='';
+  $('coords').textContent='Editing spot at '+d.lat.toFixed(2)+'°, '+d.lon.toFixed(2)+'°';
+  show();render();
+}
+$('save').onclick=function(){
+  if(!cur)return;
+  var n=Math.max(0,parseInt($('count').value,10)||0),nm=$('name').value.trim();
+  if(cur.id===null){cur.id=Date.now()+'-'+Math.random().toString(36).slice(2,6);pins.push(cur)}
+  cur.name=nm;cur.count=n;persist();close();
+};
+$('del').onclick=function(){
+  pins=pins.filter(function(p){return p!==cur});persist();close();
+};
+$('cancel').onclick=close;
+render();
+
+var msg=function(t,bad){var e=$('msg');e.textContent=t;e.style.color=bad?'var(--accent)':'var(--muted)';e.style.fontWeight=bad?'600':'400'};
+function pinAt(lat,lon,label,note,k){
+  openNew(proj([lon,lat]));
+  cur.lon=lon;cur.lat=lat;
+  $('name').value=label||'';
+  $('coords').textContent='Spot at '+lat.toFixed(4)+'°, '+lon.toFixed(4)+'° '+(note||'');
+  flyTo(lon,lat,k||14);
+}
+
+/* Offline fallback: major cities & countries [name, lat, lon, zoom] */
+var GAZ=[
+["lewisville texas",33.0462,-96.9942,11],["dallas",32.7767,-96.797,10],["houston",29.7604,-95.3698,10],["austin",30.2672,-97.7431,10],["san antonio",29.4241,-98.4936,10],
+["new york",40.7128,-74.006,10],["los angeles",34.0522,-118.2437,9],["chicago",41.8781,-87.6298,10],["miami",25.7617,-80.1918,10],["washington dc",38.9072,-77.0369,10],["seattle",47.6062,-122.3321,10],["atlanta",33.749,-84.388,10],["denver",39.7392,-104.9903,10],["san francisco",37.7749,-122.4194,11],
+["mexico city",19.4326,-99.1332,10],["guadalajara",20.6597,-103.3496,10],["guatemala city",14.6349,-90.5069,11],["san jose costa rica",9.9281,-84.0907,11],["havana",23.1136,-82.3666,11],["port-au-prince",18.5944,-72.3074,11],["santo domingo",18.4861,-69.9312,11],["kingston jamaica",17.9712,-76.7936,11],["tegucigalpa",14.0723,-87.1921,11],["managua",12.1364,-86.2514,11],
+["toronto",43.6532,-79.3832,10],["vancouver",49.2827,-123.1207,10],["montreal",45.5017,-73.5673,10],
+["bogota",4.711,-74.0721,10],["lima",-12.0464,-77.0428,10],["quito",-0.1807,-78.4678,11],["la paz",-16.4897,-68.1193,11],["santiago chile",-33.4489,-70.6693,10],["buenos aires",-34.6037,-58.3816,10],["sao paulo",-23.5505,-46.6333,10],["rio de janeiro",-22.9068,-43.1729,10],["brasilia",-15.7939,-47.8828,10],["caracas",10.4806,-66.9036,10],
+["london",51.5074,-0.1278,10],["paris",48.8566,2.3522,11],["berlin",52.52,13.405,10],["madrid",40.4168,-3.7038,10],["rome",41.9028,12.4964,11],["lisbon",38.7223,-9.1393,11],["amsterdam",52.3676,4.9041,11],["moscow",55.7558,37.6173,10],["kyiv",50.4501,30.5234,10],["warsaw",52.2297,21.0122,10],["athens",37.9838,23.7275,11],["istanbul",41.0082,28.9784,10],["dublin",53.3498,-6.2603,11],["bucharest",44.4268,26.1025,10],
+["cairo",30.0444,31.2357,10],["lagos",6.5244,3.3792,10],["abuja",9.0765,7.3986,10],["accra",5.6037,-0.187,11],["abidjan",5.3600,-4.0083,10],["dakar",14.7167,-17.4677,11],["nairobi",-1.2921,36.8219,11],["mombasa",-4.0435,39.6682,11],["kampala",0.3476,32.5825,11],["kigali",-1.9441,30.0619,11],["dar es salaam",-6.7924,39.2083,10],["addis ababa",9.03,38.74,11],["kinshasa",-4.4419,15.2663,10],["lusaka",-15.3875,28.3228,11],["harare",-17.8252,31.0335,11],["johannesburg",-26.2041,28.0473,10],["cape town",-33.9249,18.4241,10],["durban",-29.8587,31.0218,10],["maputo",-25.9692,32.5732,11],["antananarivo",-18.8792,47.5079,11],["lilongwe",-13.9626,33.7741,11],["khartoum",15.5007,32.5599,10],["luanda",-8.839,13.2894,10],["casablanca",33.5731,-7.5898,10],["tunis",36.8065,10.1815,11],["bamako",12.6392,-8.0029,11],["ouagadougou",12.3714,-1.5197,11],["niamey",13.5116,2.1254,11],["yaounde",3.848,11.5021,11],["monrovia",6.3,-10.7969,11],["freetown",8.4657,-13.2317,11],["juba",4.8594,31.5713,11],["mogadishu",2.0469,45.3182,11],
+["tel aviv",32.0853,34.7818,11],["jerusalem",31.7683,35.2137,11],["beirut",33.8938,35.5018,11],["amman",31.9454,35.9284,11],["baghdad",33.3152,44.3661,10],["tehran",35.6892,51.389,10],["riyadh",24.7136,46.6753,10],["dubai",25.2048,55.2708,10],["kabul",34.5553,69.2075,10],
+["delhi",28.6139,77.209,10],["mumbai",19.076,72.8777,10],["kolkata",22.5726,88.3639,10],["chennai",13.0827,80.2707,10],["bangalore",12.9716,77.5946,10],["hyderabad",17.385,78.4867,10],["karachi",24.8607,67.0011,10],["lahore",31.5204,74.3587,10],["dhaka",23.8103,90.4125,10],["kathmandu",27.7172,85.324,11],["colombo",6.9271,79.8612,11],
+["bangkok",13.7563,100.5018,10],["hanoi",21.0278,105.8342,10],["ho chi minh city",10.8231,106.6297,10],["phnom penh",11.5564,104.9282,11],["vientiane",17.9757,102.6331,11],["yangon",16.8409,96.1735,10],["kuala lumpur",3.139,101.6869,10],["singapore",1.3521,103.8198,11],["jakarta",-6.2088,106.8456,10],["manila",14.5995,120.9842,10],["cebu",10.3157,123.8854,10],["davao",7.1907,125.4553,10],
+["beijing",39.9042,116.4074,9],["shanghai",31.2304,121.4737,9],["hong kong",22.3193,114.1694,11],["taipei",25.033,121.5654,10],["seoul",37.5665,126.978,10],["tokyo",35.6762,139.6503,10],["osaka",34.6937,135.5023,10],["ulaanbaatar",47.8864,106.9057,10],
+["sydney",-33.8688,151.2093,10],["melbourne",-37.8136,144.9631,10],["brisbane",-27.4698,153.0251,10],["perth",-31.9505,115.8605,10],["auckland",-36.8485,174.7633,10],["port moresby",-9.4438,147.1803,11],["suva",-18.1248,178.4501,11]
+];
+var NORM=function(t){return t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9\- ]+/g,' ').replace(/\s+/g,' ').trim()};
+function gazLookup(q){
+  var n=NORM(q),best=null;
+  GAZ.forEach(function(g){
+    var key=g[0],first=key.split(' ')[0];
+    var hit=(' '+n+' ').indexOf(' '+key+' ')>=0 || (key.indexOf(' ')<0 && (' '+n+' ').indexOf(' '+key+' ')>=0) || (key.indexOf(' ')>=0 && (' '+n+' ').indexOf(' '+first+' ')>=0 && n.indexOf(key.split(' ').slice(1).join(' '))>=0);
+    if(hit&&(!best||key.length>best[0].length))best=g;
+  });
+  if(!best){ // single-word city name appearing anywhere (e.g. "123 Main St, Nairobi, Kenya")
+    GAZ.forEach(function(g){var f=g[0].split(' ')[0];if(g[0].indexOf(' ')<0||true){if((' '+n+' ').indexOf(' '+f+' ')>=0&&(!best||f.length>best[0].split(' ')[0].length))best=g}});
+  }
+  return best;
+}
+async function withTimeout(p,ms){return Promise.race([p,new Promise(function(_,rej){setTimeout(function(){rej({code:'timeout'})},ms)})])}
+
+async function geocode(q){
+  var tried=[];
+  // 1) Real address geocoder, if the page is allowed to reach it
+  try{
+    var u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(q);
+    var res=await withTimeout(fetch(u,{headers:{'Accept':'application/json'}}),6000);
+    var j=await res.json();
+    if(j&&j[0]){var t=j[0];return{lat:+t.lat,lon:+t.lon,label:t.display_name.split(',').slice(0,3).join(',').trim(),acc:'address match',k:(t.addresstype==='house'||t.category==='building'||t.category==='highway')?17:(t.addresstype==='city'||t.addresstype==='town'?11:13)}}
+    tried.push('street search found nothing');
+  }catch(e){tried.push('street search unreachable')}
+  // 2) Ask Claude
+  try{
+    var sample=await claude.use('sample');
+    if(sample){
+      var r=await withTimeout(sample.json('Geocode this place or address: '+JSON.stringify(q)+'. Reply ONLY with JSON: {"found":boolean,"lat":number,"lon":number,"label":"short place name, country","precision":"street"|"city"|"region"}. Use decimal degrees. If you are not confident, set found=false.',{cache:false}),25000);
+      if(r&&r.found&&isFinite(r.lat)&&isFinite(r.lon)&&Math.abs(r.lat)<=90&&Math.abs(r.lon)<=180){
+        return{lat:+r.lat,lon:+r.lon,label:r.label||q,acc:(r.precision||'approx.')+' estimate',k:r.precision==='street'?15:(r.precision==='city'?11:6)};
+      }
+      tried.push('Claude could not place it');
+    }else tried.push('Claude lookup not available');
+  }catch(e){tried.push('Claude lookup failed ('+(e&&e.code||'error')+')')}
+  // 3) Built-in list of major cities
+  var g=gazLookup(q);
+  if(g)return{lat:g[1],lon:g[2],label:g[0].replace(/\b\w/g,function(c){return c.toUpperCase()}),acc:'city centre (street not located)',k:g[3]};
+  return{error:tried.join('; ')};
+}
+
+$('find').onclick=async function(){
+  var q=$('q').value.trim();
+  if(!q){msg('Type a city or address first.',true);return}
+  var m=q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if(m){var la=+m[1],lo=+m[2];
+    if(Math.abs(la)<=90&&Math.abs(lo)<=180){pinAt(la,lo,'','(from coordinates)',16);msg('Pinned by coordinates.');return}}
+  $('find').disabled=true;msg('Looking up “'+q+'”…');
+  try{
+    var r=await geocode(q);
+    if(r.error){msg('Could not locate “'+q+'” ('+r.error+'). Try just the city and country, type "lat, lon", or click the map.',true)}
+    else{
+      pinAt(r.lat,r.lon,r.label,'('+r.acc+')',r.k);
+      msg('Found: '+r.label+' — '+r.acc+'. If the pin is off, click the exact spot on the map to move it.');
+    }
+  }catch(e){msg('Search failed: '+((e&&(e.message||e.code))||'unknown error'),true)}
+  $('find').disabled=false;
+};
+$('q').addEventListener('keydown',function(e){if(e.key==='Enter')$('find').click()});
+</script>
+</body>
+</html>
+
+</body></html>
